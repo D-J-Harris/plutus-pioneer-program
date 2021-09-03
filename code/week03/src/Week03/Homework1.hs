@@ -42,11 +42,41 @@ data VestingDatum = VestingDatum
 
 PlutusTx.unstableMakeIsData ''VestingDatum
 
+-- I created two helper functions, Solution1.hs way is much nicer and a testament to my new-ness to functional programming
+-- note, useful is to know functions that exist in the TxInfo record e.g. txInfoSignatories & txInfoValidRange
+{-# INLINABLE criteria1 #-}
+criteria1 :: VestingDatum -> () -> ScriptContext -> Bool
+criteria1 dat () ctx = traceIfFalse "beneficiary1 signature missing" signedByBeneficiary1 &&
+                    traceIfFalse "deadline reached" deadlineNotReached
+  where
+    info :: TxInfo
+    info = scriptContextTxInfo ctx
+
+    signedByBeneficiary1 :: Bool
+    signedByBeneficiary1 = txSignedBy info $ beneficiary1 dat
+
+    deadlineNotReached :: Bool
+    deadlineNotReached = contains (to $ deadline dat) $ txInfoValidRange info
+
+{-# INLINABLE criteria2 #-}
+criteria2 :: VestingDatum -> () -> ScriptContext -> Bool
+criteria2 dat () ctx = traceIfFalse "beneficiary2 signature missing" signedByBeneficiary2 &&
+                    traceIfFalse "deadline not reached" deadlineReached
+  where
+    info :: TxInfo
+    info = scriptContextTxInfo ctx
+
+    signedByBeneficiary2 :: Bool
+    signedByBeneficiary2 = txSignedBy info $ beneficiary2 dat
+
+    deadlineReached :: Bool
+    deadlineReached = contains (from $ (1 + deadline dat)) $ txInfoValidRange info
+
 {-# INLINABLE mkValidator #-}
 -- This should validate if either beneficiary1 has signed the transaction and the current slot is before or at the deadline
 -- or if beneficiary2 has signed the transaction and the deadline has passed.
 mkValidator :: VestingDatum -> () -> ScriptContext -> Bool
-mkValidator _ _ _ = False -- FIX ME!
+mkValidator d () ctx = criteria1 d () ctx || criteria2 d () ctx
 
 data Vesting
 instance Scripts.ValidatorTypes Vesting where
