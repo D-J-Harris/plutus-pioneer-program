@@ -35,18 +35,34 @@ import           Wallet.Emulator.Wallet
 -- Minting policy for an NFT, where the minting transaction must consume the given UTxO as input
 -- and where the TokenName will be the empty ByteString.
 mkPolicy :: TxOutRef -> () -> ScriptContext -> Bool
-mkPolicy oref () ctx = True -- FIX ME!
+mkPolicy oref () ctx = traceIfFalse "given UTxO not consumed" givenUtxoConsumed           &&
+                       traceIfFalse "token name is not empty ByteString" tokenNameCorrect
+  where
+    info :: TxInfo
+    info = scriptContextTxInfo
+
+    givenUtxoConsumed :: Bool
+    givenUtxoConsumed = any (\x -> txInInfoOutRef x == oref) $ txInfoInputs ctx
+
+    tokenNameCorrect :: Bool
+    tokenNameCorrect = case flattenValue (txInfoMint ctx) of
+      [(cs, tn, amt)] -> cs  == ownCurrencySymbol ctx && tn == (TokenName emptyByteString) && amt == 1
+        _                -> False
 
 policy :: TxOutRef -> Scripts.MintingPolicy
-policy oref = undefined -- IMPLEMENT ME!
+policy oref = mkMintingPolicyScript $
+  $$(PlutusTx.compile [|| \oref' deadline' -> Scripts.wrapMintingPolicy $ mkPolicy oref' deadline' ||])
+  `PlutusTx.applyCode`
+  PlutusTx.liftCode oref
+
 
 curSymbol :: TxOutRef -> CurrencySymbol
-curSymbol = undefined -- IMPLEMENT ME!
+curSymbol oref = scriptCurrencySymbol $ policy oref
 
 type NFTSchema = Endpoint "mint" ()
 
 mint :: Contract w NFTSchema Text ()
-mint = undefined -- IMPLEMENT ME!
+mint = 
 
 endpoints :: Contract () NFTSchema Text ()
 endpoints = mint' >> endpoints
